@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Squada+One&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <title>Real Estate Sales Ratio of Connecticut (2001 - 2021)</title>
+
+    <style>
+        body {
+            font-family: 'Lato', sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        svg {
+            background-color: whitesmoke;
+        }
+        .bar {
+            fill: steelblue;
+        }
+        .bar:hover {
+            fill: orange;
+        }
+        .axis-label {
+            font-size: 12px;
+        }
+        .bar-label {
+            font-size: 12px;
+            fill: black;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 6px;
+            font: 12px sans-serif;
+            background: lightsteelblue;
+            border: 0px;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+        .button {
+            margin: 10px;
+            padding: 10px 20px;
+            background-color: steelblue;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .button:disabled {
+            background-color: lightgray;
+            cursor: not-allowed;
+        }
+        .year-label {
+            font-size: 24px;
+            text-anchor: middle;
+            fill: black;
+        }
+        .title {
+            font-size: 28px;
+            text-anchor: middle;
+            fill: black;
+        }
+        .comment {
+            font-size: 16px;
+            text-anchor: middle;
+            fill: black;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align:center;">Real Estate Sales Ratio of Connecticut</h1>
+    <p style="text-align:center;">Sales Ratio = Assessed Value / Sale Amount. Lower the sales ratio, the better sold it was.</p>
+    <button class="button" id="prevYear">Previous Year</button>
+    <button class="button" id="nextYear">Next Year</button>
+    <script>
+
+        const dataPath = "./histogram_estate.csv";
+
+        const margin = {top: 50, right: 30, bottom: 80, left: 50},
+              width = 1200 - margin.left - margin.right,
+              height = 600 - margin.top - margin.bottom;
+
+
+        const svg = d3.select("body").append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+          .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+
+
+        const yearLabel = svg.append("text")
+            .attr("class", "year-label")
+            .attr("x", width / 2)
+            .attr("y", -20)
+            .text("");
+
+
+        svg.append("text")
+            .attr("class", "title")
+            .attr("x", width / 2)
+            .attr("y", -50)
+            .text("Real Estate Sales Ratio of Connecticut");
+
+
+        svg.append("text")
+            .attr("class", "comment")
+            .attr("x", width / 2)
+            .attr("y", -30)
+
+
+
+        svg.append("text")
+            .attr("class", "comment")
+            .attr("x", width / 2)
+            .attr("y", height + 50)
+            .text("Data imported by Office of Policy and Management.");
+
+        let currentYear = 2001;
+        let years = [];
+
+        const x = d3.scaleLinear().range([0, width]);
+        const y = d3.scaleLinear().range([height, 0]);
+
+        const xAxis = svg.append("g").attr("transform", `translate(0,${height})`);
+        const yAxis = svg.append("g");
+
+        function updateChart(data, year) {
+            console.log(`Updating chart for year: ${year}`);
+            const filteredData = data.filter(d => d.Year === year);
+            console.log(`Filtered data for year ${year}:`, filteredData);
+
+            if (filteredData.length === 0) {
+                console.warn(`No data available for the year ${year}`);
+                return;
+            }
+
+            const bins = d3.histogram()
+                .domain(x.domain())
+                .thresholds(x.ticks(50)) 
+                (filteredData.map(d => d.SalesRatio));
+
+            y.domain([0, d3.max(bins, d => d.length)]);
+
+            xAxis.transition().duration(1000).call(d3.axisBottom(x).ticks(30));
+            yAxis.transition().duration(1000).call(d3.axisLeft(y).ticks(30));
+
+            const bar = svg.selectAll(".bar")
+                .data(bins);
+
+            bar.enter().append("rect")
+                .attr("class", "bar")
+                .attr("x", 1)
+                .attr("transform", d => `translate(${x(d.x0)},${y(d.length)})`)
+                .attr("width", d => x(d.x1) - x(d.x0) - 1)
+                .attr("height", d => height - y(d.length))
+                .merge(bar)
+                .transition()
+                .duration(1000)
+                .attr("transform", d => `translate(${x(d.x0)},${y(d.length)})`)
+                .attr("width", d => x(d.x1) - x(d.x0) - 1)
+                .attr("height", d => height - y(d.length));
+
+            bar.exit().remove();
+
+            yearLabel.text(year);
+        }
+
+        function updateButtons() {
+            document.getElementById('prevYear').disabled = (currentYear === years[0]);
+            document.getElementById('nextYear').disabled = (currentYear === years[years.length - 1]);
+        }
+
+        d3.csv(dataPath).then(data => {
+            data.forEach(d => {
+                d.SalesRatio = +d.SalesRatio;
+                d.Year = +d.Year;
+            });
+
+            years = Array.from(new Set(data.map(d => d.Year))).sort((a, b) => a - b);
+            currentYear = 2001;
+
+
+            x.domain([0, d3.max(data, d => +d.SalesRatio)]);
+
+            updateChart(data, currentYear);
+            updateButtons();
+
+            document.getElementById('prevYear').addEventListener('click', () => {
+                if (currentYear > years[0]) {
+                    currentYear--;
+                    updateChart(data, currentYear);
+                    updateButtons();
+                }
+            });
+
+            document.getElementById('nextYear').addEventListener('click', () => {
+                if (currentYear < years[years.length - 1]) {
+                    currentYear++;
+                    updateChart(data, currentYear);
+                    updateButtons();
+                }
+            });
+        }).catch(error => {
+            console.error('Error loading the CSV data:', error);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Squada+One&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <title>Average Prices by Town</title>
+
+    <style>
+        body {
+            font-family: 'Lato', sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        svg {
+            background-color: whitesmoke;
+        }
+        .bar {
+            fill: steelblue;
+        }
+        .bar:hover {
+            fill: orange;
+        }
+        .axis-label {
+            font-size: 12px;
+        }
+        .bar-label {
+            font-size: 12px;
+            fill: black;
+        }
+        .tooltip {
+            position: absolute;
+            text-align: center;
+            padding: 6px;
+            font: 12px sans-serif;
+            background: lightsteelblue;
+            border: 0px;
+            border-radius: 8px;
+            pointer-events: none;
+        }
+        .button {
+            margin: 10px;
+            padding: 10px 20px;
+            background-color: steelblue;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .button:disabled {
+            background-color: lightgray;
+            cursor: not-allowed;
+        }
+        .year-label {
+            font-size: 24px;
+            text-anchor: middle;
+            fill: black;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align:center;">Top 20 Median Real Estate Sale Amount by Town in Connecticut (2001 - 2021)</h1>
+    <button class="button" id="prevYear">Previous Year</button>
+    <button class="button" id="nextYear">Next Year</button>
+    <script>
+        const dataPath = "./average_prices.csv";
+
+        const margin = {top: 50, right: 30, bottom: 100, left: 150},
+              width = 1200 - margin.left - margin.right,
+              height = 600 - margin.top - margin.bottom;
+
+
+        const svg = d3.select("body").append("svg")
+            .attr("width", width + margin.left + margin.right)
+            .attr("height", height + margin.top + margin.bottom)
+          .append("g")
+            .attr("transform", `translate(${margin.left},${margin.top})`);
+            
+
+        const yearLabel = svg.append("text")
+            .attr("class", "year-label")
+            .attr("x", width / 2)
+            .attr("y", -20)
+            .text("");
+        
+
+        let currentYear = 2001;
+        const years = Array.from({length: 2021 - 2001 + 1}, (_, i) => 2001 + i);
+
+        const x = d3.scaleLinear().range([ 0, width]);
+        const y = d3.scaleBand().range([ 0, height ]).padding(.1);
+
+        const xAxis = svg.append("g").attr("transform", `translate(0,${height})`);
+        const yAxis = svg.append("g");
+
+        function updateChart(data, year) {
+            console.log(`Updating chart for year: ${year}`);
+            const filteredData = data.filter(d => d.ListYear === year && d.rank <= 20)
+                                     .sort((a, b) => a.rank - b.rank);
+
+            console.log(`Filtered data for year ${year}:`, filteredData);
+
+            if (filteredData.length === 0) {
+                console.warn(`No data available for the year ${year}`);
+                return;
+            }
+
+            x.domain([0, d3.max(filteredData, d => +d.average_price)]);
+            y.domain(filteredData.map(d => d.Town));
+
+            xAxis.transition().duration(1000).call(d3.axisBottom(x).ticks(5));
+            yAxis.transition().duration(1000).call(d3.axisLeft(y));
+
+            svg.append("text")
+            .attr("class", "comment")
+            .attr("x", width / 2)
+            .attr("y", height + 50)
+            .text("Data imported by Office of Policy and Management.");
+
+            const bars = svg.selectAll("rect")
+                .data(filteredData, d => d.Town);
+
+            bars.enter()
+                .append("rect")
+                .attr("class", "bar")
+                .attr("x", x(0))
+                .attr("y", d => y(d.Town))
+                .attr("width", d => x(d.average_price))
+                .attr("height", y.bandwidth())
+                .merge(bars)
+                .transition()
+                .duration(1000)
+                .attr("x", x(0))
+                .attr("y", d => y(d.Town))
+                .attr("width", d => x(d.average_price))
+                .attr("height", y.bandwidth());
+
+            bars.exit().remove();
+
+            const labels = svg.selectAll(".bar-label")
+                .data(filteredData, d => d.Town);
+
+            labels.enter()
+                .append("text")
+                .attr("class", "bar-label")
+                .attr("x", d => Math.min(x(d.average_price) - 3, width - 40))  
+                .attr("y", d => y(d.Town) + y.bandwidth() / 2 + 5)
+                .merge(labels)
+                .transition()
+                .duration(1000)
+                .attr("x", d => Math.min(x(d.average_price) - 3, width - 40))  
+                .attr("y", d => y(d.Town) + y.bandwidth() / 2 + 5)
+                .text(d => `$${Math.round(d.average_price).toLocaleString()}`);
+
+            labels.exit().remove();
+
+
+            yearLabel.text(year);
+        }
+
+        function updateButtons() {
+            document.getElementById('prevYear').disabled = (currentYear === years[0]);
+            document.getElementById('nextYear').disabled = (currentYear === years[years.length - 1]);
+        }
+
+        d3.csv(dataPath).then(data => {
+            console.log('Data loaded:', data);
+            data.forEach(d => {
+                d.average_price = +d.average_price;
+                d.ListYear = +d.ListYear;
+                d.rank = +d.rank;
+            });
+
+            console.log('Parsed Data:', data);
+            updateChart(data, currentYear);
+            updateButtons();
+
+            document.getElementById('prevYear').addEventListener('click', () => {
+                if (currentYear > years[0]) {
+                    currentYear--;
+                    updateChart(data, currentYear);
+                    updateButtons();
+                }
+            });
+
+            document.getElementById('nextYear').addEventListener('click', () => {
+                if (currentYear < years[years.length - 1]) {
+                    currentYear++;
+                    updateChart(data, currentYear);
+                    updateButtons();
+                }
+            });
+        }).catch(error => {
+            console.error('Error loading the CSV data:', error);
+        });
+    </script>
+</body>
+</html>
